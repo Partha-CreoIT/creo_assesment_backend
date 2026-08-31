@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: exam_taker_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: exam
+      POSTGRES_DB: exam_taker
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam -d exam_taker"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  piston:
+    # Sandboxed code execution engine (Python / Java / C).
+    # amd64 image — runs under Rosetta/QEMU emulation on Apple Silicon.
+    image: ghcr.io/engineer-man/piston:latest
+    platform: linux/amd64
+    container_name: exam_taker_piston
+    restart: unless-stopped
+    privileged: true
+    environment:
+      # raise piston's per-request caps (defaults: run 3000ms, compile 10000ms)
+      PISTON_RUN_TIMEOUT: 10000
+      PISTON_COMPILE_TIMEOUT: 15000
+    ports:
+      - "2000:2000"
+    volumes:
+      - piston_packages:/piston/packages
+    tmpfs:
+      - /tmp:exec
+
+  runner:
+    # Native-arch fallback code runner (used automatically when Piston can't
+    # execute on this machine). Start with: docker compose --profile fallback up -d
+    profiles: ["fallback"]
+    build: ./runner-image
+    container_name: exam_taker_runner
+    restart: unless-stopped
+    network_mode: none
+    pids_limit: 256
+    mem_limit: 768m
+    tmpfs:
+      - /home/runner/work:exec,uid=1001,gid=1001,size=256m
+
+volumes:
+  db_data:
+  piston_packages:
