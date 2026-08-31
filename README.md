@@ -1,4 +1,4 @@
-# Exam Taker — Backend (`exam_taker_bc`)
+# Creo Assess — Backend
 
 Go API for Creo Assess, a proctored mock-test platform: question bank (English / Aptitude MCQ / Coding), exams with six question-paper sets (A–F), random set assignment, sandboxed code execution (Python, Java, C), violation tracking with auto-submit, async grading, and results export.
 
