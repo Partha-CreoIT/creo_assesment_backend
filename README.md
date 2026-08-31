@@ -1,6 +1,6 @@
 # Exam Taker — Backend (`exam_taker_bc`)
 
-Go API for a proctored placement-exam platform: question bank (English / Aptitude MCQ / Coding), exams with six question-paper sets (A–F), random set assignment, sandboxed code execution (Python, Java, C), violation tracking with auto-submit, async grading, and results export.
+Go API for Creo Assess, a proctored mock-test platform: question bank (English / Aptitude MCQ / Coding), exams with six question-paper sets (A–F), random set assignment, sandboxed code execution (Python, Java, C), violation tracking with auto-submit, async grading, and results export.
 
 Frontend lives in the sibling repo `exam_taker_fr` (Next.js).
 

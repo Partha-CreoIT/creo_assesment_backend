@@ -9,7 +9,7 @@ import (
 	"exam_taker_bc/internal/services"
 )
 
-const demoExamTitle = "Campus Placement Mock Test"
+const demoExamTitle = "Campus Mock Test"
 
 func intPtr(i int) *int { return &i }
 
@@ -40,7 +40,7 @@ func Run(db *gorm.DB) error {
 		DurationMin:   60,
 		MaxViolations: 3,
 		Status:        models.ExamDraft,
-		Instructions: "Welcome to the Campus Placement Mock Test.\n\n" +
+		Instructions: "Welcome to the Campus Mock Test.\n\n" +
 			"**Rules**\n\n" +
 			"- The exam runs in fullscreen. Leaving fullscreen, switching tabs or switching windows counts as a violation — after 3 violations your exam is submitted automatically.\n" +
 			"- The exam has three sections: English, Aptitude and Coding.\n" +
