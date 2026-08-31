@@ -1,0 +1,62 @@
+# Production compose for Dokploy — the entire backend as ONE service:
+# Postgres (data) + Piston (code runner) + Go API.
+#
+# Set these in Dokploy's Environment tab (they fill the ${...} below):
+#   POSTGRES_PASSWORD  ADMIN_EMAIL  ADMIN_PASSWORD  JWT_SECRET  CORS_ORIGINS
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: exam_taker
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam -d exam_taker"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  piston:
+    image: ghcr.io/engineer-man/piston:latest
+    restart: unless-stopped
+    privileged: true
+    environment:
+      PISTON_RUN_TIMEOUT: 10000
+      PISTON_COMPILE_TIMEOUT: 15000
+    volumes:
+      - piston_packages:/piston/packages
+    tmpfs:
+      - /tmp:exec
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://exam:${POSTGRES_PASSWORD}@db:5432/exam_taker?sslmode=disable
+      PISTON_URL: http://piston:2000
+      RUNNER: piston
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    networks:
+      # default: talks to db + piston inside this compose
+      # dokploy-network: lets Traefik route the public domain to :8080
+      - default
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  db_data:
+  piston_packages:
