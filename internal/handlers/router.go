@@ -50,6 +50,8 @@ func (a *API) BuildRouter() *gin.Engine {
 	admin.GET("/questions/:id", a.GetQuestion)
 	admin.PUT("/questions/:id", a.UpdateQuestion)
 	admin.DELETE("/questions/:id", a.DeleteQuestion)
+	admin.GET("/questions/template", a.DownloadQuestionTemplate)
+	admin.POST("/exams/:id/questions/upload", a.UploadQuestions)
 
 	admin.GET("/exams", a.ListExams)
 	admin.POST("/exams", a.CreateExam)
