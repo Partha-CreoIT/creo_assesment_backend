@@ -35,7 +35,7 @@ Tests: `go test ./...`
 
 `RUNNER=auto` (default) probes Piston with a real execution at startup and falls back to the docker-exec runner if Piston can't execute.
 
-- **Piston** (recommended): sandboxed engine used by the compose file. On Apple Silicon it needs Docker Desktop's **Rosetta** x86 emulation (Settings → General → "Use Rosetta…") — under plain qemu emulation Piston's isolate sandbox fails with `clone failed: Invalid argument`.
+- **Piston** (recommended): sandboxed engine used by the compose file. On Apple Silicon it needs Rosetta-backed amd64 emulation, not plain qemu translation — under plain qemu, Piston's isolate sandbox fails with `clone failed: Invalid argument`. Depending on your Docker provider: **Docker Desktop** — Settings → General → "Use Rosetta for x86/amd64 emulation on Apple Silicon". **Colima** — `colima start --vm-type=vz --vz-rosetta` (needs `vmType: vz`, not the older `qemu` VM type; check with `colima status`).
 - **docker-exec fallback**: a native-arch container with python3/gcc/openjdk, driven via `docker exec` (non-root user, no network, memory/pids caps, kill timeouts). Start it with `docker compose --profile fallback up -d` and set `RUNNER=docker` to force it.
 
 The compose file raises Piston's request caps (`PISTON_RUN_TIMEOUT=10000`, `PISTON_COMPILE_TIMEOUT=15000`); the client clamps question time limits to 10s.
@@ -46,7 +46,7 @@ The compose file raises Piston's request caps (`PISTON_RUN_TIMEOUT=10000`, `PIST
 - **Students** register with name / email / semester (1–8) / optional phone. The server assigns the least-filled set (random tie-break), starts the clock (`duration_min`), and issues an opaque session token. The same email resumes an active session with the original clock; a submitted email is rejected.
 - **Paper** is sanitized: no correct indices, no hidden test cases.
 - **Answers** upsert per question (autosave); writes are rejected after `ends_at` + `ANSWER_GRACE_SEC`.
-- **Runs** (`POST /me/run`) execute against visible sample tests or custom stdin, rate-limited per session (2s) and globally (4 concurrent).
+- **Runs** (`POST /me/run`) execute against visible sample tests or custom stdin, rate-limited per session (`RUN_RATE_LIMIT_SEC`, default 2s) and globally (`RUN_CONCURRENCY`, default 4 concurrent; a request waits up to `RUN_QUEUE_TIMEOUT_SEC` for a free slot before returning 429).
 - **Violations**: `tab_hidden` / `window_blur` / `fullscreen_exit` are strikes; copy/paste/right-click/reload are logged only. Reaching `max_violations` auto-submits and flags the session. A sweeper auto-submits sessions whose time expired.
 - **Grading** is async: MCQ instantly; coding against *all* test cases (weighted); English left for manual grading in the admin panel, which recomputes totals. Sessions stuck in `grading` are re-queued on restart.
 - **Monitoring**: per-session progress, last-seen (heartbeat), strikes, scores; CSV export.
@@ -70,6 +70,10 @@ Admin (JWT via `POST /admin/login`): questions CRUD · exams CRUD + `/activate` 
 | `RUNNER_CONTAINER` | `exam_taker_runner` | fallback container name |
 | `CORS_ORIGINS` | `http://localhost:3000` | comma-separated |
 | `ANSWER_GRACE_SEC` | `30` | late-save grace after time up |
+| `RUN_CONCURRENCY` | `4` | max concurrent `/me/run` executions, process-wide |
+| `GRADER_WORKERS` | `4` | background grading worker pool size |
+| `RUN_QUEUE_TIMEOUT_SEC` | `15` | how long a run waits for a free concurrency slot before 429 |
+| `RUN_RATE_LIMIT_SEC` | `2` | minimum seconds between `/me/run` calls for one session |
 
 ## Honest limitations
 

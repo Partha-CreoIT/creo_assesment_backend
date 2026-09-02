@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,34 +15,48 @@ import (
 	"exam_taker_bc/internal/services"
 )
 
-const (
-	maxConcurrentRuns = 4
-	minRunInterval    = 2 * time.Second
-	maxSampleRuns     = 10
-)
+const maxSampleRuns = 10
 
-var (
-	runSem      = make(chan struct{}, maxConcurrentRuns)
-	lastRunMu   sync.Mutex
-	lastRunAt   = map[uint]time.Time{}
-)
+// RunLimiter bounds /me/run: a process-wide concurrency cap (with a bounded
+// wait for a free slot) plus a per-session minimum interval between runs.
+// Sized from Config (RUN_CONCURRENCY / RUN_RATE_LIMIT_SEC / RUN_QUEUE_TIMEOUT_SEC)
+// so load testing can find the actual capacity sweet spot instead of guessing.
+type RunLimiter struct {
+	sem          chan struct{}
+	mu           sync.Mutex
+	lastRunAt    map[uint]time.Time
+	rateLimit    time.Duration
+	queueTimeout time.Duration
+}
 
-func acquireRunSlot(sessionID uint) (release func(), retryAfter time.Duration, ok bool) {
-	lastRunMu.Lock()
-	if t, exists := lastRunAt[sessionID]; exists {
-		if wait := minRunInterval - time.Since(t); wait > 0 {
-			lastRunMu.Unlock()
+func NewRunLimiter(concurrency int, rateLimit, queueTimeout time.Duration) *RunLimiter {
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	return &RunLimiter{
+		sem:          make(chan struct{}, concurrency),
+		lastRunAt:    map[uint]time.Time{},
+		rateLimit:    rateLimit,
+		queueTimeout: queueTimeout,
+	}
+}
+
+func (rl *RunLimiter) acquire(sessionID uint) (release func(), retryAfter time.Duration, ok bool) {
+	rl.mu.Lock()
+	if t, exists := rl.lastRunAt[sessionID]; exists {
+		if wait := rl.rateLimit - time.Since(t); wait > 0 {
+			rl.mu.Unlock()
 			return nil, wait, false
 		}
 	}
-	lastRunAt[sessionID] = time.Now()
-	lastRunMu.Unlock()
+	rl.lastRunAt[sessionID] = time.Now()
+	rl.mu.Unlock()
 
 	select {
-	case runSem <- struct{}{}:
-		return func() { <-runSem }, 0, true
-	case <-time.After(15 * time.Second):
-		return nil, 2 * time.Second, false
+	case rl.sem <- struct{}{}:
+		return func() { <-rl.sem }, 0, true
+	case <-time.After(rl.queueTimeout):
+		return nil, rl.rateLimit, false
 	}
 }
 
@@ -98,10 +113,11 @@ func (a *API) RunCode(c *gin.Context) {
 		return
 	}
 
-	release, retryAfter, ok := acquireRunSlot(s.ID)
+	release, retryAfter, ok := a.RunLimiter.acquire(s.ID)
 	if !ok {
-		c.Header("Retry-After", "2")
-		fail(c, http.StatusTooManyRequests, "please wait "+retryAfter.Round(time.Second).String()+" between runs")
+		wait := retryAfter.Round(time.Second)
+		c.Header("Retry-After", strconv.Itoa(int(wait.Seconds())))
+		fail(c, http.StatusTooManyRequests, "please wait "+wait.String()+" between runs")
 		return
 	}
 	defer release()

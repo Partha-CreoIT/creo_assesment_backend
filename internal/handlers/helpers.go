@@ -14,10 +14,11 @@ import (
 
 // API bundles the dependencies every handler needs.
 type API struct {
-	DB     *gorm.DB
-	Cfg    *config.Config
-	Grader *services.Grader
-	Runner runner.Runner
+	DB         *gorm.DB
+	Cfg        *config.Config
+	Grader     *services.Grader
+	Runner     runner.Runner
+	RunLimiter *RunLimiter
 }
 
 func fail(c *gin.Context, code int, msg string) {

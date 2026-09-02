@@ -35,6 +35,11 @@ services:
       - piston_packages:/piston/packages
     tmpfs:
       - /tmp:exec
+    extra_hosts:
+      # 185.199.109.133 (one of GitHub's 4 release-assets CDN IPs) is
+      # unreachable from Docker's network on this machine, causing Piston's
+      # package-index fetch to crash the process on startup. Pin to a known-good IP.
+      - "release-assets.githubusercontent.com:185.199.108.133"
 
   runner:
     # Native-arch fallback code runner (used automatically when Piston can't
