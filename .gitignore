@@ -3,9 +3,3 @@ bin/
 *.exe
 .DS_Store
 .gstack/
-
-# Load-testing / API-regression tooling — local-only, never shipped to the
-# deployed server. Run against a live deployment via BASE_URL, not committed.
-/loadtest/
-/postman/
-details.md
