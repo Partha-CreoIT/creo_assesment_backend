@@ -1,0 +1,1936 @@
+{
+  "info": {
+    "name": "Creo Exam Taker Backend - Full API Regression",
+    "description": "End-to-end functional coverage of every route exposed by the exam_taker_bc Go backend: admin auth, question bank CRUD, exam lifecycle (create/populate/activate/close), candidate registration & resume, paper retrieval, autosave answers, Piston-backed code execution (sample + custom stdin), proctoring violation strikes & auto-submit, admin grading/monitoring, and CSV export.\\n\\nRun with:\\n  npx newman run postman/exam-taker.postman_collection.json\\n\\nOverride the target server with:\\n  npx newman run postman/exam-taker.postman_collection.json --env-var base_url=http://localhost:8080",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/healthz"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"ok is true\", () => pm.expect(json.ok).to.eql(true));",
+                  "pm.test(\"serverNow present\", () => pm.expect(json.serverNow).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Admin Auth",
+      "item": [
+        {
+          "name": "Login - Invalid Credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"not-the-real-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"error message present\", () => pm.expect(pm.response.json().error).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"token present\", () => pm.expect(json.token).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"email echoed\", () => pm.expect(json.email).to.eql(pm.collectionVariables.get(\"admin_email\")));",
+                  "pm.collectionVariables.set(\"admin_token\", json.token);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Admin - Question Bank",
+      "item": [
+        {
+          "name": "Create English Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"english\",\n  \"title\": \"Newman QA - Reading Comprehension Sample\",\n  \"body\": \"Read the passage and answer: Renewable energy adoption has accelerated due to falling costs. Summarize the main driver in 2-3 sentences.\",\n  \"hint\": \"Focus on cost trends.\",\n  \"marks\": 5,\n  \"difficulty\": \"medium\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"id present\", () => pm.expect(json.id).to.be.a(\"number\"));",
+                  "pm.test(\"type is english\", () => pm.expect(json.type).to.eql(\"english\"));",
+                  "pm.collectionVariables.set(\"question_english_id\", String(json.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Aptitude Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"aptitude\",\n  \"title\": \"Newman QA - Simple Addition\",\n  \"body\": \"What is 2 + 2?\",\n  \"hint\": \"Basic arithmetic.\",\n  \"marks\": 2,\n  \"difficulty\": \"easy\",\n  \"options\": [\n    \"3\",\n    \"4\",\n    \"5\",\n    \"6\"\n  ],\n  \"correctIndex\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"id present\", () => pm.expect(json.id).to.be.a(\"number\"));",
+                  "pm.test(\"type is aptitude\", () => pm.expect(json.type).to.eql(\"aptitude\"));",
+                  "pm.collectionVariables.set(\"question_aptitude_id\", String(json.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Coding Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"coding\",\n  \"title\": \"Newman QA - Add Two Numbers\",\n  \"body\": \"Read two space-separated integers from stdin and print their sum.\",\n  \"hint\": \"Use input().split()\",\n  \"marks\": 10,\n  \"difficulty\": \"easy\",\n  \"starterCode\": {\n    \"python\": \"# write your solution here\",\n    \"java\": \"// write your solution here\",\n    \"c\": \"// write your solution here\"\n  },\n  \"syntaxNote\": \"Print only the sum, nothing else.\",\n  \"timeLimitMs\": 3000,\n  \"memoryLimitKb\": 0,\n  \"testCases\": [\n    {\n      \"input\": \"2 2\",\n      \"expected\": \"4\",\n      \"hidden\": false,\n      \"weight\": 1\n    },\n    {\n      \"input\": \"10 15\",\n      \"expected\": \"25\",\n      \"hidden\": false,\n      \"weight\": 1\n    },\n    {\n      \"input\": \"100 200\",\n      \"expected\": \"300\",\n      \"hidden\": true,\n      \"weight\": 1\n    },\n    {\n      \"input\": \"-5 5\",\n      \"expected\": \"0\",\n      \"hidden\": true,\n      \"weight\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"id present\", () => pm.expect(json.id).to.be.a(\"number\"));",
+                  "pm.test(\"type is coding\", () => pm.expect(json.type).to.eql(\"coding\"));",
+                  "pm.test(\"4 test cases stored\", () => pm.expect(json.testCases).to.have.lengthOf(4));",
+                  "pm.collectionVariables.set(\"question_coding_id\", String(json.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Questions (filter type=coding)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/questions?type=coding&limit=10"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"items is array\", () => pm.expect(json.items).to.be.an(\"array\"));",
+                  "pm.test(\"total is a number\", () => pm.expect(json.total).to.be.a(\"number\"));",
+                  "const codingId = pm.collectionVariables.get(\"question_coding_id\");",
+                  "pm.test(\"created coding question is listed\", () => {",
+                  "  pm.expect(json.items.some(q => String(q.id) === String(codingId))).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Question By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/questions/{{question_coding_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"id matches\", () => pm.expect(String(json.id)).to.eql(pm.collectionVariables.get(\"question_coding_id\")));",
+                  "pm.test(\"has 4 test cases\", () => pm.expect(json.testCases).to.have.lengthOf(4));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Question (bump marks)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/questions/{{question_coding_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"coding\",\n  \"title\": \"Newman QA - Add Two Numbers (Updated)\",\n  \"body\": \"Read two space-separated integers from stdin and print their sum.\",\n  \"hint\": \"Use input().split()\",\n  \"marks\": 12,\n  \"difficulty\": \"easy\",\n  \"starterCode\": {\n    \"python\": \"# write your solution here\",\n    \"java\": \"// write your solution here\",\n    \"c\": \"// write your solution here\"\n  },\n  \"syntaxNote\": \"Print only the sum, nothing else.\",\n  \"timeLimitMs\": 3000,\n  \"memoryLimitKb\": 0,\n  \"testCases\": [\n    {\n      \"input\": \"2 2\",\n      \"expected\": \"4\",\n      \"hidden\": false,\n      \"weight\": 1\n    },\n    {\n      \"input\": \"10 15\",\n      \"expected\": \"25\",\n      \"hidden\": false,\n      \"weight\": 1\n    },\n    {\n      \"input\": \"100 200\",\n      \"expected\": \"300\",\n      \"hidden\": true,\n      \"weight\": 1\n    },\n    {\n      \"input\": \"-5 5\",\n      \"expected\": \"0\",\n      \"hidden\": true,\n      \"weight\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"marks updated to 12\", () => pm.expect(json.marks).to.eql(12));",
+                  "pm.test(\"title updated\", () => pm.expect(json.title).to.include(\"Updated\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Throwaway Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"english\",\n  \"title\": \"Newman QA - Throwaway (to be deleted)\",\n  \"body\": \"This question exists only to exercise the delete endpoint.\",\n  \"marks\": 1,\n  \"difficulty\": \"easy\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set(\"throwaway_question_id\", String(json.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Throwaway Question",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/questions/{{throwaway_question_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Deleted Question - 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/questions/{{throwaway_question_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Admin - Exam Setup (Main Exam)",
+      "item": [
+        {
+          "name": "Create Main Exam",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/exams",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Newman QA Exam {{$timestamp}}\",\n  \"instructions\": \"Automated end-to-end test exam created by the Newman collection.\",\n  \"durationMin\": 60,\n  \"maxViolations\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"status is draft\", () => pm.expect(json.status).to.eql(\"draft\"));",
+                  "pm.collectionVariables.set(\"exam_id\", String(json.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Main Exam Detail (capture set ids)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"6 sets A-F created\", () => pm.expect(json.sets).to.have.lengthOf(6));",
+                  "json.sets.forEach(s => pm.collectionVariables.set(\"set_\" + s.label + \"_id\", String(s.id)));",
+                  "pm.test(\"all set ids captured\", () => {",
+                  "  [\"A\",\"B\",\"C\",\"D\",\"E\",\"F\"].forEach(l => {",
+                  "    pm.expect(pm.collectionVariables.get(\"set_\" + l + \"_id\")).to.not.be.undefined;",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Questions to Set A",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/sets/{{set_A_id}}/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionIds\": [\n    {{question_english_id}},\n    {{question_aptitude_id}},\n    {{question_coding_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"count is 3\", () => pm.expect(pm.response.json().count).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Questions to Set B",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/sets/{{set_B_id}}/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionIds\": [\n    {{question_english_id}},\n    {{question_aptitude_id}},\n    {{question_coding_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"count is 3\", () => pm.expect(pm.response.json().count).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Questions to Set C",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/sets/{{set_C_id}}/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionIds\": [\n    {{question_english_id}},\n    {{question_aptitude_id}},\n    {{question_coding_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"count is 3\", () => pm.expect(pm.response.json().count).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Questions to Set D",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/sets/{{set_D_id}}/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionIds\": [\n    {{question_english_id}},\n    {{question_aptitude_id}},\n    {{question_coding_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"count is 3\", () => pm.expect(pm.response.json().count).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Questions to Set E",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/sets/{{set_E_id}}/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionIds\": [\n    {{question_english_id}},\n    {{question_aptitude_id}},\n    {{question_coding_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"count is 3\", () => pm.expect(pm.response.json().count).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Questions to Set F",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/sets/{{set_F_id}}/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionIds\": [\n    {{question_english_id}},\n    {{question_aptitude_id}},\n    {{question_coding_id}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"count is 3\", () => pm.expect(pm.response.json().count).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate Main Exam",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}/activate"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"exam is active\", () => pm.expect(pm.response.json().status).to.eql(\"active\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Admin - Auto-Distribute & Draft-Delete Demo",
+      "item": [
+        {
+          "name": "Create Throwaway Exam",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/exams",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Newman QA Throwaway Exam {{$timestamp}}\",\n  \"instructions\": \"Used only to exercise auto-distribute and draft-delete.\",\n  \"durationMin\": 30,\n  \"maxViolations\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"throwaway_exam_id\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auto-Distribute Throwaway Exam",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/exams/{{throwaway_exam_id}}/auto-distribute",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"english\": 1,\n  \"aptitude\": 1,\n  \"coding\": 1,\n  \"mode\": \"shuffled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"distributed is true\", () => pm.expect(pm.response.json().distributed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Throwaway Exam Detail (verify sets filled)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{throwaway_exam_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"every set has at least one question\", () => {",
+                  "  json.sets.forEach(s => pm.expect(s.questions.length).to.be.above(0));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Throwaway Exam (still draft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{throwaway_exam_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"deleted is true\", () => pm.expect(pm.response.json().deleted).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Get Active Exam",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/exam/active"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"active exam is our main exam\", () => {",
+                  "  pm.expect(json.exam).to.not.be.null;",
+                  "  pm.expect(String(json.exam.id)).to.eql(pm.collectionVariables.get(\"exam_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Candidate - Primary Flow (Student One)",
+      "item": [
+        {
+          "name": "Register / Join Exam",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Newman Student One\",\n  \"email\": \"newman.student1.{{$timestamp}}{{$randomInt}}@example.com\",\n  \"semester\": 3,\n  \"phone\": \"9876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 (new session)\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"token present\", () => pm.expect(json.token).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"resumed is false\", () => pm.expect(json.resumed).to.eql(false));",
+                  "pm.test(\"assigned to our exam\", () => pm.expect(String(json.exam.id)).to.eql(pm.collectionVariables.get(\"exam_id\")));",
+                  "pm.collectionVariables.set(\"student_token\", json.token);",
+                  "pm.collectionVariables.set(\"student1_email\", pm.request.body ? JSON.parse(pm.request.body.raw).email : \"\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"status is active\", () => pm.expect(json.status).to.eql(\"active\"));",
+                  "pm.test(\"violationCount is 0\", () => pm.expect(json.violationCount).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Paper",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me/paper"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"exactly 3 questions on paper\", () => pm.expect(json.questions).to.have.lengthOf(3));",
+                  "const ids = json.questions.map(q => String(q.id));",
+                  "pm.test(\"paper matches the 3 questions we assigned\", () => {",
+                  "  pm.expect(ids).to.include.members([",
+                  "    pm.collectionVariables.get(\"question_english_id\"),",
+                  "    pm.collectionVariables.get(\"question_aptitude_id\"),",
+                  "    pm.collectionVariables.get(\"question_coding_id\"),",
+                  "  ]);",
+                  "});",
+                  "pm.test(\"coding question exposes sample tests, not hidden ones\", () => {",
+                  "  const coding = json.questions.find(q => q.type === \"coding\");",
+                  "  pm.expect(coding.hiddenTestCount).to.eql(2);",
+                  "  pm.expect(coding.sampleTests).to.have.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save Answer - English",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/answers/{{question_english_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answerText\": \"Falling costs of solar panels and wind turbines are the main driver behind faster renewable energy adoption.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"savedAt present\", () => pm.expect(pm.response.json().savedAt).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save Answer - Aptitude",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/answers/{{question_aptitude_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"selectedIndex\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"savedAt present\", () => pm.expect(pm.response.json().savedAt).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save Answer - Coding",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/answers/{{question_coding_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"a, b = map(int, input().split())\\nprint(a + b)\",\n  \"language\": \"python\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"savedAt present\", () => pm.expect(pm.response.json().savedAt).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-Register Same Email (Resume Check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Newman Student One\",\n  \"email\": \"{{student1_email}}\",\n  \"semester\": 3,\n  \"phone\": \"9876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 (resumed, not created)\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"resumed is true\", () => pm.expect(json.resumed).to.eql(true));",
+                  "pm.test(\"same session token returned\", () => pm.expect(json.token).to.eql(pm.collectionVariables.get(\"student_token\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run Code - Samples Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/run",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": {{question_coding_id}},\n  \"language\": \"python\",\n  \"code\": \"a, b = map(int, input().split())\\nprint(a + b)\",\n  \"mode\": \"samples\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"compiled ok\", () => pm.expect(json.compileOk).to.eql(true));",
+                  "pm.test(\"all sample tests passed\", () => {",
+                  "  pm.expect(json.passed).to.eql(json.total);",
+                  "  pm.expect(json.total).to.be.above(0);",
+                  "  json.results.forEach(r => pm.expect(r.status).to.eql(\"passed\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run Code - Custom Stdin Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/run",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": {{question_coding_id}},\n  \"language\": \"python\",\n  \"code\": \"a, b = map(int, input().split())\\nprint(a + b)\",\n  \"mode\": \"custom\",\n  \"stdin\": \"7 8\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// /me/run is rate-limited to 1 call per 2s per session; the previous request",
+                  "// in this flow just used it, so wait out the window before firing this one.",
+                  "setTimeout(function () {}, 2200);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"compiled ok\", () => pm.expect(json.compileOk).to.eql(true));",
+                  "pm.test(\"stdout is 15\", () => pm.expect(json.stdout.trim()).to.eql(\"15\"));",
+                  "pm.test(\"exit code is 0\", () => pm.expect(json.exitCode).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report Violation - Logged Kind (copy)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/violations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"copy\",\n  \"meta\": \"newman e2e test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"not a strike\", () => pm.expect(json.strike).to.eql(false));",
+                  "pm.test(\"violationCount unchanged (0)\", () => pm.expect(json.violationCount).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report Violation - Strike Kind (tab_hidden)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/violations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"tab_hidden\",\n  \"meta\": \"newman e2e test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"is a strike\", () => pm.expect(json.strike).to.eql(true));",
+                  "pm.test(\"violationCount is 1\", () => pm.expect(json.violationCount).to.eql(1));",
+                  "pm.test(\"not auto-submitted yet (below maxViolations)\", () => pm.expect(json.autoSubmitted).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Heartbeat",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me/heartbeat"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"status is active\", () => pm.expect(json.status).to.eql(\"active\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Exam",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me/submit"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"status is grading\", () => pm.expect(json.status).to.eql(\"grading\"));",
+                  "pm.test(\"submittedAt present\", () => pm.expect(json.submittedAt).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me After Submit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"session no longer active\", () => pm.expect([\"grading\", \"graded\"]).to.include(json.status));",
+                  "pm.test(\"submitKind is manual\", () => pm.expect(json.submitKind).to.eql(\"manual\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-Register After Submit - Already Attempted",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Newman Student One\",\n  \"email\": \"{{student1_email}}\",\n  \"semester\": 3,\n  \"phone\": \"9876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error explains already attempted\", () => pm.expect(pm.response.json().error).to.include(\"already attempted\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{student_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Candidate - Violation Auto-Submit (Student Two)",
+      "item": [
+        {
+          "name": "Register Student Two",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Newman Student Two\",\n  \"email\": \"newman.student2.{{$timestamp}}{{$randomInt}}@example.com\",\n  \"semester\": 5,\n  \"phone\": \"9123456780\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set(\"student2_token\", json.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Violation Strike 1 (tab_hidden)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/violations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"tab_hidden\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{student2_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"violationCount is 1\", () => pm.expect(json.violationCount).to.eql(1));",
+                  "pm.test(\"not auto-submitted\", () => pm.expect(json.autoSubmitted).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Violation Strike 2 (window_blur)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/violations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"window_blur\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{student2_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"violationCount is 2\", () => pm.expect(json.violationCount).to.eql(2));",
+                  "pm.test(\"not auto-submitted\", () => pm.expect(json.autoSubmitted).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Violation Strike 3 (fullscreen_exit) - triggers auto-submit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/me/violations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"fullscreen_exit\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{student2_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"violationCount is 3\", () => pm.expect(json.violationCount).to.eql(3));",
+                  "pm.test(\"auto-submitted due to max violations\", () => pm.expect(json.autoSubmitted).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me - Confirm Auto-Submitted",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{student2_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"session no longer active\", () => pm.expect([\"grading\", \"graded\"]).to.include(json.status));",
+                  "pm.test(\"submitKind is auto_violation\", () => pm.expect(json.submitKind).to.eql(\"auto_violation\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Admin - Grading & Monitoring",
+      "item": [
+        {
+          "name": "List Sessions for Main Exam",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}/sessions"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"at least 2 sessions (student one + two)\", () => pm.expect(json.items.length).to.be.at.least(2));",
+                  "const s1 = json.items.find(i => i.student.email === pm.collectionVariables.get(\"student1_email\"));",
+                  "pm.test(\"student one session found\", () => pm.expect(s1).to.not.be.undefined);",
+                  "pm.test(\"student one has a pending english answer\", () => pm.expect(s1.pendingEnglish).to.be.at.least(1));",
+                  "pm.collectionVariables.set(\"admin_session_id\", String(s1.id));",
+                  "const s2 = json.items.find(i => i.violationCount === 3);",
+                  "pm.test(\"student two is flagged\", () => pm.expect(s2.flagged).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Session Detail (Student One)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/sessions/{{admin_session_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"3 items on the paper\", () => pm.expect(json.items).to.have.lengthOf(3));",
+                  "const englishItem = json.items.find(i => i.question.type === \"english\");",
+                  "pm.test(\"english answer present\", () => pm.expect(englishItem.answer).to.not.be.null);",
+                  "pm.collectionVariables.set(\"english_answer_id\", String(englishItem.answer.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grade English Answer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/admin/answers/{{english_answer_id}}/grade",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"score\": 4.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"score recorded\", () => pm.expect(json.score).to.eql(4.5));",
+                  "pm.test(\"manualScore includes it\", () => pm.expect(json.manualScore).to.be.at.least(4.5));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Sessions After Grading (verify score updated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}/sessions"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "const s1 = json.items.find(i => i.student.email === pm.collectionVariables.get(\"student1_email\"));",
+                  "pm.test(\"pendingEnglish dropped to 0\", () => pm.expect(s1.pendingEnglish).to.eql(0));",
+                  "pm.test(\"totalScore reflects grading\", () => pm.expect(s1.totalScore).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export Results CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}/export"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"content-type is csv\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/csv\"));",
+                  "pm.test(\"body has header row\", () => pm.expect(pm.response.text()).to.include(\"Name,Email\"));",
+                  "pm.test(\"student one appears in export\", () => pm.expect(pm.response.text()).to.include(\"Newman Student One\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Admin - Exam Housekeeping",
+      "item": [
+        {
+          "name": "Close Main Exam",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}/close"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"exam is closed\", () => pm.expect(pm.response.json().status).to.eql(\"closed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Closed Exam - Rejected (not draft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/v1/admin/exams/{{exam_id}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error explains draft-only rule\", () => pm.expect(pm.response.json().error).to.include(\"draft\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "admin_email",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "admin_password",
+      "value": "admin123"
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "question_english_id",
+      "value": ""
+    },
+    {
+      "key": "question_aptitude_id",
+      "value": ""
+    },
+    {
+      "key": "question_coding_id",
+      "value": ""
+    },
+    {
+      "key": "throwaway_question_id",
+      "value": ""
+    },
+    {
+      "key": "exam_id",
+      "value": ""
+    },
+    {
+      "key": "throwaway_exam_id",
+      "value": ""
+    },
+    {
+      "key": "set_A_id",
+      "value": ""
+    },
+    {
+      "key": "set_B_id",
+      "value": ""
+    },
+    {
+      "key": "set_C_id",
+      "value": ""
+    },
+    {
+      "key": "set_D_id",
+      "value": ""
+    },
+    {
+      "key": "set_E_id",
+      "value": ""
+    },
+    {
+      "key": "set_F_id",
+      "value": ""
+    },
+    {
+      "key": "student_token",
+      "value": ""
+    },
+    {
+      "key": "student1_email",
+      "value": ""
+    },
+    {
+      "key": "student2_token",
+      "value": ""
+    },
+    {
+      "key": "admin_session_id",
+      "value": ""
+    },
+    {
+      "key": "english_answer_id",
+      "value": ""
+    }
+  ]
+}
